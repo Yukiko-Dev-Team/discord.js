@@ -1,0 +1,77 @@
+import { APIMessageComponentEmoji, ButtonStyle } from 'discord-api-types/v10';
+import { z } from 'zod';
+import type { SelectMenuOptionBuilder } from './selectMenu/SelectMenuOption';
+import { UnsafeSelectMenuOptionBuilder } from './selectMenu/UnsafeSelectMenuOption';
+
+export const customIdValidator = z.string().min(1).max(100);
+
+export const emojiValidator = z
+	.object({
+		id: z.string(),
+		name: z.string(),
+		animated: z.boolean(),
+	})
+	.partial()
+	.strict();
+
+export const disabledValidator = z.boolean();
+
+export const buttonLabelValidator = z.string().nonempty().max(80);
+
+export const buttonStyleValidator = z.number().int().min(ButtonStyle.Primary).max(ButtonStyle.Link);
+
+export const placeholderValidator = z.string().max(150);
+export const minMaxValidator = z.number().int().min(0).max(25);
+
+export const labelValueDescriptionValidator = z.string().min(1).max(100);
+export const optionValidator = z.union([
+	z.object({
+		label: labelValueDescriptionValidator,
+		value: labelValueDescriptionValidator,
+		description: labelValueDescriptionValidator.optional(),
+		emoji: emojiValidator.optional(),
+		default: z.boolean().optional(),
+	}),
+	z.instanceof(UnsafeSelectMenuOptionBuilder),
+]);
+export const optionsValidator = optionValidator.array().nonempty();
+export const optionsLengthValidator = z.number().int().min(0).max(25);
+
+export function validateRequiredSelectMenuParameters(options: SelectMenuOptionBuilder[], customId?: string) {
+	customIdValidator.parse(customId);
+	optionsValidator.parse(options);
+}
+
+export const labelValueValidator = z.string().min(1).max(100);
+export const defaultValidator = z.boolean();
+
+export function validateRequiredSelectMenuOptionParameters(label?: string, value?: string) {
+	labelValueValidator.parse(label);
+	labelValueValidator.parse(value);
+}
+
+export const urlValidator = z.string().url();
+
+export function validateRequiredButtonParameters(
+	style?: ButtonStyle,
+	label?: string,
+	emoji?: APIMessageComponentEmoji,
+	customId?: string,
+	url?: string,
+) {
+	if (url && customId) {
+		throw new RangeError('URL and custom id are mutually exclusive');
+	}
+
+	if (!label && !emoji) {
+		throw new RangeError('Buttons must have a label and/or an emoji');
+	}
+
+	if (style === ButtonStyle.Link) {
+		if (!url) {
+			throw new RangeError('Link buttons must have a url');
+		}
+	} else if (url) {
+		throw new RangeError('Non-link buttons cannot have a url');
+	}
+}
