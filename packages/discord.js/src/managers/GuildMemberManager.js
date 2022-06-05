@@ -3,6 +3,7 @@
 const { Buffer } = require('node:buffer');
 const { setTimeout, clearTimeout } = require('node:timers');
 const { Collection } = require('@discordjs/collection');
+const { makeURLSearchParams } = require('@discordjs/rest');
 const { DiscordSnowflake } = require('@sapphire/snowflake');
 const { Routes, GatewayOpcodes } = require('discord-api-types/v10');
 const CachedManager = require('./CachedManager');
@@ -11,6 +12,7 @@ const BaseGuildVoiceChannel = require('../structures/BaseGuildVoiceChannel');
 const { GuildMember } = require('../structures/GuildMember');
 const { Role } = require('../structures/Role');
 const Events = require('../util/Events');
+const Partials = require('../util/Partials');
 
 /**
  * Manages API methods for GuildMembers and stores their cache.
@@ -120,6 +122,20 @@ class GuildMemberManager extends CachedManager {
   }
 
   /**
+   * The client user as a GuildMember of this guild
+   * @type {?GuildMember}
+   * @readonly
+   */
+  get me() {
+    return (
+      this.resolve(this.client.user.id) ??
+      (this.client.options.partials.includes(Partials.GuildMember)
+        ? this._add({ user: { id: this.client.user.id } }, true)
+        : null)
+    );
+  }
+
+  /**
    * Options used to fetch a single member from a guild.
    * @typedef {BaseFetchOptions} FetchMemberOptions
    * @property {UserResolvable} user The user to fetch
@@ -205,7 +221,7 @@ class GuildMemberManager extends CachedManager {
    */
   async search({ query, limit, cache = true } = {}) {
     const data = await this.client.rest.get(Routes.guildMembersSearch(this.guild.id), {
-      query: new URLSearchParams({ query, limit }),
+      query: makeURLSearchParams({ query, limit }),
     });
     return data.reduce((col, member) => col.set(member.user.id, this._add(member, cache)), new Collection());
   }
@@ -224,10 +240,7 @@ class GuildMemberManager extends CachedManager {
    * @returns {Promise<Collection<Snowflake, GuildMember>>}
    */
   async list({ after, limit, cache = true } = {}) {
-    const query = new URLSearchParams({ limit });
-    if (after) {
-      query.set('after', after);
-    }
+    const query = makeURLSearchParams({ limit, after });
     const data = await this.client.rest.get(Routes.guildMembers(this.guild.id), { query });
     return data.reduce((col, member) => col.set(member.user.id, this._add(member, cache)), new Collection());
   }
@@ -346,7 +359,7 @@ class GuildMemberManager extends CachedManager {
     const endpoint = Routes.guildPrune(this.guild.id);
 
     const { pruned } = await (dry
-      ? this.client.rest.get(endpoint, { query: new URLSearchParams(query), reason })
+      ? this.client.rest.get(endpoint, { query: makeURLSearchParams(query), reason })
       : this.client.rest.post(endpoint, { body: { ...query, compute_prune_count }, reason }));
 
     return pruned;

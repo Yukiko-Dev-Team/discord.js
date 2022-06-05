@@ -188,8 +188,11 @@ class Invite extends Base {
       this.createdTimestamp ??= null;
     }
 
-    if ('expires_at' in data) this._expiresTimestamp = Date.parse(data.expires_at);
-    else this._expiresTimestamp ??= null;
+    if ('expires_at' in data) {
+      this._expiresTimestamp = data.expires_at && Date.parse(data.expires_at);
+    } else {
+      this._expiresTimestamp ??= null;
+    }
 
     if ('stage_instance' in data) {
       /**
@@ -230,10 +233,10 @@ class Invite extends Base {
   get deletable() {
     const guild = this.guild;
     if (!guild || !this.client.guilds.cache.has(guild.id)) return false;
-    if (!guild.me) throw new Error('GUILD_UNCACHED_ME');
+    if (!guild.members.me) throw new Error('GUILD_UNCACHED_ME');
     return Boolean(
       this.channel?.permissionsFor(this.client.user).has(PermissionFlagsBits.ManageChannels, false) ||
-        guild.me.permissions.has(PermissionFlagsBits.ManageGuild),
+        guild.members.me.permissions.has(PermissionFlagsBits.ManageGuild),
     );
   }
 

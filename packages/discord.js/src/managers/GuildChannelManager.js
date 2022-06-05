@@ -13,10 +13,8 @@ const Webhook = require('../structures/Webhook');
 const { ThreadChannelTypes } = require('../util/Constants');
 const DataResolver = require('../util/DataResolver');
 const Util = require('../util/Util');
-const { resolveAutoArchiveMaxLimit } = require('../util/Util');
 
 let cacheWarningEmitted = false;
-let storeChannelDeprecationEmitted = false;
 
 /**
  * Manages API methods for GuildChannels and stores their cache.
@@ -101,7 +99,7 @@ class GuildChannelManager extends CachedManager {
   /**
    * Options used to create a new channel in a guild.
    * @typedef {CategoryCreateChannelOptions} GuildChannelCreateOptions
-   * @property {CategoryChannelResolvable} [parent] Parent of the new channel
+   * @property {?CategoryChannelResolvable} [parent] Parent of the new channel
    */
 
   /**
@@ -139,20 +137,12 @@ class GuildChannelManager extends CachedManager {
       position,
       rateLimitPerUser,
       rtcRegion,
+      videoQualityMode,
       reason,
     } = {},
   ) {
     parent &&= this.client.channels.resolveId(parent);
     permissionOverwrites &&= permissionOverwrites.map(o => PermissionOverwrites.resolve(o, this.guild));
-
-    if (type === ChannelType.GuildStore && !storeChannelDeprecationEmitted) {
-      storeChannelDeprecationEmitted = true;
-      process.emitWarning(
-        // eslint-disable-next-line max-len
-        'Creating store channels is deprecated by Discord and will stop working in March 2022. Check the docs for more info.',
-        'DeprecationWarning',
-      );
-    }
 
     const data = await this.client.rest.post(Routes.guildChannels(this.guild.id), {
       body: {
@@ -167,6 +157,7 @@ class GuildChannelManager extends CachedManager {
         permission_overwrites: permissionOverwrites,
         rate_limit_per_user: rateLimitPerUser,
         rtc_region: rtcRegion,
+        video_quality_mode: videoQualityMode,
       },
       reason,
     });
@@ -210,7 +201,7 @@ class GuildChannelManager extends CachedManager {
    * @property {string} [name] The name of the channel
    * @property {ChannelType} [type] The type of the channel (only conversion between text and news is supported)
    * @property {number} [position] The position of the channel
-   * @property {string} [topic] The topic of the text channel
+   * @property {?string} [topic] The topic of the text channel
    * @property {boolean} [nsfw] Whether the channel is NSFW
    * @property {number} [bitrate] The bitrate of the voice channel
    * @property {number} [userLimit] The user limit of the voice channel
@@ -263,9 +254,6 @@ class GuildChannelManager extends CachedManager {
       }
     }
 
-    let defaultAutoArchiveDuration = data.defaultAutoArchiveDuration;
-    if (defaultAutoArchiveDuration === 'MAX') defaultAutoArchiveDuration = resolveAutoArchiveMaxLimit(this.guild);
-
     const newData = await this.client.rest.patch(Routes.channel(channel.id), {
       body: {
         name: (data.name ?? channel.name).trim(),
@@ -279,7 +267,7 @@ class GuildChannelManager extends CachedManager {
         parent_id: parent,
         lock_permissions: data.lockPermissions,
         rate_limit_per_user: data.rateLimitPerUser,
-        default_auto_archive_duration: defaultAutoArchiveDuration,
+        default_auto_archive_duration: data.defaultAutoArchiveDuration,
         permission_overwrites,
       },
       reason,
@@ -443,6 +431,7 @@ class GuildChannelManager extends CachedManager {
     const id = this.resolveId(channel);
     if (!id) throw new TypeError('INVALID_TYPE', 'channel', 'GuildChannelResolvable');
     await this.client.rest.delete(Routes.channel(id), { reason });
+    this.client.actions.ChannelDelete.handle({ id });
   }
 }
 
