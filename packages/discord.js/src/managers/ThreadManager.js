@@ -4,7 +4,7 @@ const { Collection } = require('@discordjs/collection');
 const { makeURLSearchParams } = require('@discordjs/rest');
 const { ChannelType, Routes } = require('discord-api-types/v10');
 const CachedManager = require('./CachedManager');
-const { TypeError } = require('../errors');
+const { TypeError, ErrorCodes } = require('../errors');
 const ThreadChannel = require('../structures/ThreadChannel');
 
 /**
@@ -65,7 +65,8 @@ class ThreadManager extends CachedManager {
    * @typedef {StartThreadOptions} ThreadCreateOptions
    * @property {MessageResolvable} [startMessage] The message to start a thread from. <warn>If this is defined then type
    * of thread gets automatically defined and cannot be changed. The provided `type` field will be ignored</warn>
-   * @property {ThreadChannelTypes|number} [type] The type of thread to create.
+   * @property {ChannelType.GuildNewsThread|ChannelType.GuildPublicThread|ChannelType.GuildPrivateThread} [type]
+   * The type of thread to create.
    * Defaults to {@link ChannelType.GuildPublicThread} if created in a {@link TextChannel}
    * <warn>When creating threads in a {@link NewsChannel} this is ignored and is always
    * {@link ChannelType.GuildNewsThread}</warn>
@@ -82,7 +83,7 @@ class ThreadManager extends CachedManager {
    * channel.threads
    *   .create({
    *     name: 'food-talk',
-   *     autoArchiveDuration: 60,
+   *     autoArchiveDuration: ThreadAutoArchiveDuration.OneHour,
    *     reason: 'Needed a separate thread for food',
    *   })
    *   .then(threadChannel => console.log(threadChannel))
@@ -92,7 +93,7 @@ class ThreadManager extends CachedManager {
    * channel.threads
    *   .create({
    *      name: 'mod-talk',
-   *      autoArchiveDuration: 60,
+   *      autoArchiveDuration: ThreadAutoArchiveDuration.OneHour,
    *      type: ChannelType.GuildPrivateThread,
    *      reason: 'Needed a separate thread for moderation',
    *    })
@@ -109,14 +110,14 @@ class ThreadManager extends CachedManager {
     rateLimitPerUser,
   } = {}) {
     if (type && typeof type !== 'string' && typeof type !== 'number') {
-      throw new TypeError('INVALID_TYPE', 'type', 'ThreadChannelType or Number');
+      throw new TypeError(ErrorCodes.InvalidType, 'type', 'ThreadChannelType or Number');
     }
     let resolvedType =
       this.channel.type === ChannelType.GuildNews ? ChannelType.GuildNewsThread : ChannelType.GuildPublicThread;
     let startMessageId;
     if (startMessage) {
       startMessageId = this.channel.messages.resolveId(startMessage);
-      if (!startMessageId) throw new TypeError('INVALID_TYPE', 'startMessage', 'MessageResolvable');
+      if (!startMessageId) throw new TypeError(ErrorCodes.InvalidType, 'startMessage', 'MessageResolvable');
     } else if (this.channel.type !== ChannelType.GuildNews) {
       resolvedType = type ?? resolvedType;
     }
@@ -178,7 +179,7 @@ class ThreadManager extends CachedManager {
    * @typedef {Object} FetchArchivedThreadOptions
    * @property {string} [type='public'] The type of threads to fetch, either `public` or `private`
    * @property {boolean} [fetchAll=false] Whether to fetch **all** archived threads when type is `private`.
-   * Requires `MANAGE_THREADS` if true
+   * Requires {@link PermissionFlagsBits.ManageThreads} if true
    * @property {DateResolvable|ThreadChannelResolvable} [before] Only return threads that were created before this Date
    * or Snowflake. <warn>Must be a {@link ThreadChannelResolvable} when type is `private` and fetchAll is `false`</warn>
    * @property {number} [limit] Maximum number of threads to return
@@ -192,7 +193,8 @@ class ThreadManager extends CachedManager {
    */
 
   /**
-   * Obtains a set of archived threads from Discord, requires `READ_MESSAGE_HISTORY` in the parent channel.
+   * Obtains a set of archived threads from Discord, requires {@link PermissionFlagsBits.ReadMessageHistory}
+   * in the parent channel.
    * @param {FetchArchivedThreadOptions} [options] The options to fetch archived threads
    * @param {boolean} [cache=true] Whether to cache the new thread objects if they aren't already
    * @returns {Promise<FetchedThreads>}
@@ -220,7 +222,7 @@ class ThreadManager extends CachedManager {
             query.set('before', timestamp);
           }
         } catch {
-          throw new TypeError('INVALID_TYPE', 'before', 'DateResolvable or ThreadChannelResolvable');
+          throw new TypeError(ErrorCodes.InvalidType, 'before', 'DateResolvable or ThreadChannelResolvable');
         }
       }
     }
@@ -230,7 +232,8 @@ class ThreadManager extends CachedManager {
   }
 
   /**
-   * Obtains the accessible active threads from Discord, requires `READ_MESSAGE_HISTORY` in the parent channel.
+   * Obtains the accessible active threads from Discord, requires {@link PermissionFlagsBits.ReadMessageHistory}
+   * in the parent channel.
    * @param {boolean} [cache=true] Whether to cache the new thread objects if they aren't already
    * @returns {Promise<FetchedThreads>}
    */

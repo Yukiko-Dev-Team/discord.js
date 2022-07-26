@@ -5,6 +5,7 @@ const { ApplicationCommandOptionType } = require('discord-api-types/v10');
 const isEqual = require('fast-deep-equal');
 const Base = require('./Base');
 const ApplicationCommandPermissionsManager = require('../managers/ApplicationCommandPermissionsManager');
+const PermissionsBitField = require('../util/PermissionsBitField');
 
 /**
  * Represents an application command.
@@ -121,12 +122,27 @@ class ApplicationCommand extends Base {
       this.options ??= [];
     }
 
-    if ('default_permission' in data) {
+    if ('default_member_permissions' in data) {
       /**
-       * Whether the command is enabled by default when the app is added to a guild
-       * @type {boolean}
+       * The default bitfield used to determine whether this command be used in a guild
+       * @type {?Readonly<PermissionsBitField>}
        */
-      this.defaultPermission = data.default_permission;
+      this.defaultMemberPermissions = data.default_member_permissions
+        ? new PermissionsBitField(BigInt(data.default_member_permissions)).freeze()
+        : null;
+    } else {
+      this.defaultMemberPermissions ??= null;
+    }
+
+    if ('dm_permission' in data) {
+      /**
+       * Whether the command can be used in DMs
+       * <info>This property is always `null` on guild commands</info>
+       * @type {boolean|null}
+       */
+      this.dmPermission = data.dm_permission;
+    } else {
+      this.dmPermission ??= null;
     }
 
     if ('version' in data) {
@@ -176,8 +192,9 @@ class ApplicationCommand extends Base {
    * if type is {@link ApplicationCommandType.ChatInput}
    * @property {ApplicationCommandType} [type=ApplicationCommandType.ChatInput] The type of the command
    * @property {ApplicationCommandOptionData[]} [options] Options for the command
-   * @property {boolean} [defaultPermission=true] Whether the command is enabled by default when the app is added to a
-   * guild
+   * @property {?PermissionResolvable} [defaultMemberPermissions] The bitfield used to determine the default permissions
+   * a member needs in order to run the command
+   * @property {boolean} [dmPermission] Whether the command is enabled in DMs
    */
 
   /**
@@ -204,6 +221,10 @@ class ApplicationCommand extends Base {
    * {@link ApplicationCommandOptionType.Number} option
    * @property {number} [maxValue] The maximum value for an {@link ApplicationCommandOptionType.Integer} or
    * {@link ApplicationCommandOptionType.Number} option
+   * @property {number} [minLength] The minimum length for an {@link ApplicationCommandOptionType.String} option
+   * (maximum of `6000`)
+   * @property {number} [maxLength] The maximum length for an {@link ApplicationCommandOptionType.String} option
+   * (maximum of `6000`)
    */
 
   /**
@@ -215,7 +236,7 @@ class ApplicationCommand extends Base {
 
   /**
    * Edits this application command.
-   * @param {ApplicationCommandData} data The data to update the command with
+   * @param {Partial<ApplicationCommandData>} data The data to update the command with
    * @returns {Promise<ApplicationCommand>}
    * @example
    * // Edit the description of this command
@@ -282,12 +303,21 @@ class ApplicationCommand extends Base {
   }
 
   /**
-   * Edits the default permission of this ApplicationCommand
-   * @param {boolean} [defaultPermission=true] The default permission for this command
+   * Edits the default member permissions of this ApplicationCommand
+   * @param {?PermissionResolvable} defaultMemberPermissions The default member permissions required to run this command
    * @returns {Promise<ApplicationCommand>}
    */
-  setDefaultPermission(defaultPermission = true) {
-    return this.edit({ defaultPermission });
+  setDefaultMemberPermissions(defaultMemberPermissions) {
+    return this.edit({ defaultMemberPermissions });
+  }
+
+  /**
+   * Edits the DM permission of this ApplicationCommand
+   * @param {boolean} [dmPermission=true] Whether the command can be used in DMs
+   * @returns {Promise<ApplicationCommand>}
+   */
+  setDMPermission(dmPermission = true) {
+    return this.edit({ dmPermission });
   }
 
   /**
@@ -325,17 +355,33 @@ class ApplicationCommand extends Base {
     // If given an id, check if the id matches
     if (command.id && this.id !== command.id) return false;
 
+    let defaultMemberPermissions = null;
+    let dmPermission = command.dmPermission ?? command.dm_permission;
+
+    if ('default_member_permissions' in command) {
+      defaultMemberPermissions = command.default_member_permissions
+        ? new PermissionsBitField(BigInt(command.default_member_permissions)).bitfield
+        : null;
+    }
+
+    if ('defaultMemberPermissions' in command) {
+      defaultMemberPermissions =
+        command.defaultMemberPermissions !== null
+          ? new PermissionsBitField(command.defaultMemberPermissions).bitfield
+          : null;
+    }
+
     // Check top level parameters
     if (
       command.name !== this.name ||
       ('description' in command && command.description !== this.description) ||
       ('version' in command && command.version !== this.version) ||
-      ('autocomplete' in command && command.autocomplete !== this.autocomplete) ||
       (command.type && command.type !== this.type) ||
       // Future proof for options being nullable
       // TODO: remove ?? 0 on each when nullable
       (command.options?.length ?? 0) !== (this.options?.length ?? 0) ||
-      (command.defaultPermission ?? command.default_permission ?? true) !== this.defaultPermission ||
+      defaultMemberPermissions !== (this.defaultMemberPermissions?.bitfield ?? null) ||
+      (typeof dmPermission !== 'undefined' && dmPermission !== this.dmPermission) ||
       !isEqual(command.nameLocalizations ?? command.name_localizations ?? {}, this.nameLocalizations ?? {}) ||
       !isEqual(
         command.descriptionLocalizations ?? command.description_localizations ?? {},
@@ -400,6 +446,8 @@ class ApplicationCommand extends Base {
       (option.channelTypes ?? option.channel_types)?.length !== existing.channelTypes?.length ||
       (option.minValue ?? option.min_value) !== existing.minValue ||
       (option.maxValue ?? option.max_value) !== existing.maxValue ||
+      (option.minLength ?? option.min_length) !== existing.minLength ||
+      (option.maxLength ?? option.max_length) !== existing.maxLength ||
       !isEqual(option.nameLocalizations ?? option.name_localizations ?? {}, existing.nameLocalizations ?? {}) ||
       !isEqual(
         option.descriptionLocalizations ?? option.description_localizations ?? {},
@@ -468,6 +516,10 @@ class ApplicationCommand extends Base {
    * {@link ApplicationCommandOptionType.Number} option
    * @property {number} [maxValue] The maximum value for an {@link ApplicationCommandOptionType.Integer} or
    * {@link ApplicationCommandOptionType.Number} option
+   * @property {number} [minLength] The minimum length for an {@link ApplicationCommandOptionType.String} option
+   * (maximum of `6000`)
+   * @property {number} [maxLength] The maximum length for an {@link ApplicationCommandOptionType.String} option
+   * (maximum of `6000`)
    */
 
   /**
@@ -490,6 +542,8 @@ class ApplicationCommand extends Base {
     const channelTypesKey = received ? 'channelTypes' : 'channel_types';
     const minValueKey = received ? 'minValue' : 'min_value';
     const maxValueKey = received ? 'maxValue' : 'max_value';
+    const minLengthKey = received ? 'minLength' : 'min_length';
+    const maxLengthKey = received ? 'maxLength' : 'max_length';
     const nameLocalizationsKey = received ? 'nameLocalizations' : 'name_localizations';
     const nameLocalizedKey = received ? 'nameLocalized' : 'name_localized';
     const descriptionLocalizationsKey = received ? 'descriptionLocalizations' : 'description_localizations';
@@ -519,6 +573,8 @@ class ApplicationCommand extends Base {
       [channelTypesKey]: option.channelTypes ?? option.channel_types,
       [minValueKey]: option.minValue ?? option.min_value,
       [maxValueKey]: option.maxValue ?? option.max_value,
+      [minLengthKey]: option.minLength ?? option.min_length,
+      [maxLengthKey]: option.maxLength ?? option.max_length,
     };
   }
 }

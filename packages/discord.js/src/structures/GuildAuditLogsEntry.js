@@ -1,7 +1,7 @@
 'use strict';
 
 const { DiscordSnowflake } = require('@sapphire/snowflake');
-const { OverwriteType, AuditLogEvent } = require('discord-api-types/v10');
+const { AuditLogOptionsType, AuditLogEvent } = require('discord-api-types/v10');
 const { GuildScheduledEvent } = require('./GuildScheduledEvent');
 const Integration = require('./Integration');
 const Invite = require('./Invite');
@@ -9,7 +9,7 @@ const { StageInstance } = require('./StageInstance');
 const { Sticker } = require('./Sticker');
 const Webhook = require('./Webhook');
 const Partials = require('../util/Partials');
-const Util = require('../util/Util');
+const { flatten } = require('../util/Util');
 
 const Targets = {
   All: 'All',
@@ -26,6 +26,7 @@ const Targets = {
   StageInstance: 'StageInstance',
   Sticker: 'Sticker',
   Thread: 'Thread',
+  ApplicationCommand: 'ApplicationCommand',
   Unknown: 'Unknown',
 };
 
@@ -44,10 +45,11 @@ const Targets = {
  * * A sticker
  * * A guild scheduled event
  * * A thread
- * * An object with an id key if target was deleted
+ * * An application command
+ * * An object with an id key if target was deleted or fake entity
  * * An object where the keys represent either the new value or the old value
- * @typedef {?(Object|Guild|Channel|User|Role|Invite|Webhook|GuildEmoji|Message|Integration|StageInstance|Sticker|
- * GuildScheduledEvent)} AuditLogEntryTarget
+ * @typedef {?(Object|Guild|BaseChannel|User|Role|Invite|Webhook|GuildEmoji|Message|Integration|StageInstance|Sticker|
+ * GuildScheduledEvent|ApplicationCommand)} AuditLogEntryTarget
  */
 
 /**
@@ -57,6 +59,25 @@ const Targets = {
  * * Update
  * * All
  * @typedef {string} AuditLogActionType
+ */
+
+/**
+ * The target type of an entry. Here are the available types:
+ * * Guild
+ * * Channel
+ * * User
+ * * Role
+ * * Invite
+ * * Webhook
+ * * Emoji
+ * * Message
+ * * Integration
+ * * StageInstance
+ * * Sticker
+ * * Thread
+ * * GuildScheduledEvent
+ * * ApplicationCommandPermission
+ * @typedef {string} AuditLogTargetType
  */
 
 /**
@@ -86,9 +107,9 @@ class GuildAuditLogsEntry {
 
     /**
      * Specific action type of this entry in its string presentation
-     * @type {AuditLogAction}
+     * @type {AuditLogEvent}
      */
-    this.action = Object.keys(AuditLogEvent).find(k => AuditLogEvent[k] === data.action_type);
+    this.action = data.action_type;
 
     /**
      * The reason of this entry
@@ -110,6 +131,8 @@ class GuildAuditLogsEntry {
      * An entry in the audit log representing a specific change.
      * @typedef {Object} AuditLogChange
      * @property {string} key The property that was changed, e.g. `nick` for nickname changes
+     * <warn>For application command permissions updates the key is the id of the user, channel,
+     * role, or a permission constant that was updated instead of an actual property name</warn>
      * @property {*} [old] The old value of the change, e.g. for nicknames, the old nickname
      * @property {*} [new] The new value of the change, e.g. for nicknames, the new nickname
      */
@@ -166,18 +189,18 @@ class GuildAuditLogsEntry {
       case AuditLogEvent.ChannelOverwriteUpdate:
       case AuditLogEvent.ChannelOverwriteDelete:
         switch (data.options.type) {
-          case OverwriteType.Role:
+          case AuditLogOptionsType.Role:
             this.extra = guild.roles.cache.get(data.options.id) ?? {
               id: data.options.id,
               name: data.options.role_name,
-              type: OverwriteType.Role,
+              type: AuditLogOptionsType.Role,
             };
             break;
 
-          case OverwriteType.Member:
+          case AuditLogOptionsType.Member:
             this.extra = guild.members.cache.get(data.options.id) ?? {
               id: data.options.id,
-              type: OverwriteType.Member,
+              type: AuditLogOptionsType.Member,
             };
             break;
 
@@ -191,6 +214,13 @@ class GuildAuditLogsEntry {
       case AuditLogEvent.StageInstanceUpdate:
         this.extra = {
           channel: guild.client.channels.cache.get(data.options?.channel_id) ?? { id: data.options?.channel_id },
+        };
+        break;
+
+      case AuditLogEvent.ApplicationCommandPermissionUpdate:
+        this.extra = {
+          applicationId: data.options.application_id,
+          guild: guild.client.guilds.cache.get(data.options.guild_id) ?? { id: data.options.guild_id },
         };
         break;
 
@@ -321,6 +351,8 @@ class GuildAuditLogsEntry {
             { id: data.target_id, guild_id: guild.id },
           ),
         );
+    } else if (targetType === Targets.ApplicationCommand) {
+      this.target = logs.applicationCommands.get(data.target_id) ?? { id: data.target_id };
     } else if (data.target_id) {
       this.target = guild[`${targetType.toLowerCase()}s`]?.cache.get(data.target_id) ?? { id: data.target_id };
     }
@@ -328,7 +360,7 @@ class GuildAuditLogsEntry {
 
   /**
    * Finds the target type of a guild audit log entry.
-   * @param {AuditLogAction} target The action target.
+   * @param {AuditLogEvent} target The action target
    * @returns {AuditLogTargetType}
    */
   static targetType(target) {
@@ -345,12 +377,13 @@ class GuildAuditLogsEntry {
     if (target < 100) return Targets.Sticker;
     if (target < 110) return Targets.GuildScheduledEvent;
     if (target < 120) return Targets.Thread;
+    if (target < 130) return Targets.ApplicationCommand;
     return Targets.Unknown;
   }
 
   /**
    * Finds the action type from the guild audit log entry action.
-   * @param {AuditLogAction} action The action target.
+   * @param {AuditLogEvent} action The action target
    * @returns {AuditLogActionType}
    */
   static actionType(action) {
@@ -417,6 +450,7 @@ class GuildAuditLogsEntry {
         AuditLogEvent.StickerUpdate,
         AuditLogEvent.GuildScheduledEventUpdate,
         AuditLogEvent.ThreadUpdate,
+        AuditLogEvent.ApplicationCommandPermissionUpdate,
       ].includes(action)
     ) {
       return 'Update';
@@ -444,7 +478,7 @@ class GuildAuditLogsEntry {
   }
 
   toJSON() {
-    return Util.flatten(this, { createdTimestamp: true });
+    return flatten(this, { createdTimestamp: true });
   }
 }
 

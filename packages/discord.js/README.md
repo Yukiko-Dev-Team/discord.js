@@ -1,15 +1,18 @@
 <div align="center">
-  <br />
-  <p>
-    <a href="https://discord.js.org"><img src="https://discord.js.org/static/logo.svg" width="546" alt="discord.js" /></a>
-  </p>
-  <br />
-  <p>
-    <a href="https://discord.gg/djs"><img src="https://img.shields.io/discord/222078108977594368?color=5865F2&logo=discord&logoColor=white" alt="Discord server" /></a>
-    <a href="https://www.npmjs.com/package/discord.js"><img src="https://img.shields.io/npm/v/discord.js.svg?maxAge=3600" alt="npm version" /></a>
-    <a href="https://www.npmjs.com/package/discord.js"><img src="https://img.shields.io/npm/dt/discord.js.svg?maxAge=3600" alt="npm downloads" /></a>
-    <a href="https://github.com/discordjs/discord.js/actions"><img src="https://github.com/discordjs/discord.js/actions/workflows/test.yml/badge.svg" alt="Tests status" /></a>
-  </p>
+	<br />
+	<p>
+		<a href="https://discord.js.org"><img src="https://discord.js.org/static/logo.svg" width="546" alt="discord.js" /></a>
+	</p>
+	<br />
+	<p>
+		<a href="https://discord.gg/djs"><img src="https://img.shields.io/discord/222078108977594368?color=5865F2&logo=discord&logoColor=white" alt="Discord server" /></a>
+		<a href="https://www.npmjs.com/package/discord.js"><img src="https://img.shields.io/npm/v/discord.js.svg?maxAge=3600" alt="npm version" /></a>
+		<a href="https://www.npmjs.com/package/discord.js"><img src="https://img.shields.io/npm/dt/discord.js.svg?maxAge=3600" alt="npm downloads" /></a>
+		<a href="https://github.com/discordjs/discord.js/actions"><img src="https://github.com/discordjs/discord.js/actions/workflows/test.yml/badge.svg" alt="Tests status" /></a>
+	</p>
+	<p>
+		<a href="https://vercel.com/?utm_source=discordjs&utm_campaign=oss"><img src="https://raw.githubusercontent.com/discordjs/discord.js/main/.github/powered-by-vercel.svg" alt="Vercel" /></a>
+	</p>
 </div>
 
 ## About
@@ -45,16 +48,16 @@ pnpm add discord.js
 Install all required dependencies:
 
 ```sh-session
-npm install discord.js @discordjs/rest discord-api-types
-yarn add discord.js @discordjs/rest discord-api-types
-pnpm add discord.js @discordjs/rest discord-api-types
+npm install discord.js @discordjs/rest
+yarn add discord.js @discordjs/rest
+pnpm add discord.js @discordjs/rest
 ```
 
 Register a slash command against the Discord API:
 
 ```js
 const { REST } = require('@discordjs/rest');
-const { Routes } = require('discord-api-types/v10');
+const { Routes } = require('discord.js');
 
 const commands = [
   {
@@ -89,7 +92,7 @@ client.on('ready', () => {
 });
 
 client.on('interactionCreate', async interaction => {
-  if (!interaction.isCommand()) return;
+  if (!interaction.isChatInputCommand()) return;
 
   if (interaction.commandName === 'ping') {
     await interaction.reply('Pong!');
@@ -101,10 +104,10 @@ client.login('token');
 
 ## Links
 
-- [Website](https://discord.js.org/) ([source](https://github.com/discordjs/website))
+- [Website](https://discord.js.org/) ([source](https://github.com/discordjs/discord.js/tree/main/packages/website))
 - [Documentation](https://discord.js.org/#/docs)
 - [Guide](https://discordjs.guide/) ([source](https://github.com/discordjs/guide))
-  See also the [Update Guide](https://discordjs.guide/additional-info/changes-in-v13.html), including updated and removed items in the library.
+  See also the [Update Guide](https://discordjs.guide/additional-info/changes-in-v14.html), including updated and removed items in the library.
 - [discord.js Discord server](https://discord.gg/djs)
 - [Discord API Discord server](https://discord.gg/discord-api)
 - [GitHub](https://github.com/discordjs/discord.js/tree/main/packages/discord.js)

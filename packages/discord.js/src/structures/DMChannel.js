@@ -2,17 +2,17 @@
 
 const { userMention } = require('@discordjs/builders');
 const { ChannelType } = require('discord-api-types/v10');
-const { Channel } = require('./Channel');
+const { BaseChannel } = require('./BaseChannel');
 const TextBasedChannel = require('./interfaces/TextBasedChannel');
 const MessageManager = require('../managers/MessageManager');
 const Partials = require('../util/Partials');
 
 /**
  * Represents a direct message channel between two users.
- * @extends {Channel}
+ * @extends {BaseChannel}
  * @implements {TextBasedChannel}
  */
-class DMChannel extends Channel {
+class DMChannel extends BaseChannel {
   constructor(client, data) {
     super(client, data);
 
@@ -114,8 +114,16 @@ class DMChannel extends Channel {
   // Doesn't work on DM channels; bulkDelete() {}
   // Doesn't work on DM channels; fetchWebhooks() {}
   // Doesn't work on DM channels; createWebhook() {}
+  // Doesn't work on DM channels; setRateLimitPerUser() {}
+  // Doesn't work on DM channels; setNSFW() {}
 }
 
-TextBasedChannel.applyToClass(DMChannel, true, ['bulkDelete', 'fetchWebhooks', 'createWebhook']);
+TextBasedChannel.applyToClass(DMChannel, true, [
+  'bulkDelete',
+  'fetchWebhooks',
+  'createWebhook',
+  'setRateLimitPerUser',
+  'setNSFW',
+]);
 
 module.exports = DMChannel;

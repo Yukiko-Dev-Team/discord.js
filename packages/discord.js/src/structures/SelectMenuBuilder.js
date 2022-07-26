@@ -1,8 +1,8 @@
 'use strict';
 
-const { SelectMenuBuilder: BuildersSelectMenu, isJSONEncodable } = require('@discordjs/builders');
-const Transformers = require('../util/Transformers');
-const Util = require('../util/Util');
+const { SelectMenuBuilder: BuildersSelectMenu, isJSONEncodable, normalizeArray } = require('@discordjs/builders');
+const { toSnakeCase } = require('../util/Transformers');
+const { resolvePartialEmoji } = require('../util/Util');
 
 /**
  * Class used to build select menu components to be sent through the API
@@ -11,42 +11,50 @@ const Util = require('../util/Util');
 class SelectMenuBuilder extends BuildersSelectMenu {
   constructor({ options, ...data } = {}) {
     super(
-      Transformers.toSnakeCase({
+      toSnakeCase({
         ...data,
         options: options?.map(({ emoji, ...option }) => ({
           ...option,
-          emoji: emoji && typeof emoji === 'string' ? Util.parseEmoji(emoji) : emoji,
+          emoji: emoji && typeof emoji === 'string' ? resolvePartialEmoji(emoji) : emoji,
         })),
       }),
     );
   }
 
   /**
+   * Normalizes a select menu option emoji
+   * @param {SelectMenuOptionData|JSONEncodable<APISelectMenuOption>} selectMenuOption The option to normalize
+   * @returns {Array<SelectMenuOptionBuilder|APISelectMenuOption>}
+   * @private
+   */
+  static normalizeEmoji(selectMenuOption) {
+    if (isJSONEncodable(selectMenuOption)) {
+      return selectMenuOption;
+    }
+
+    const { emoji, ...option } = selectMenuOption;
+    return {
+      ...option,
+      emoji: typeof emoji === 'string' ? resolvePartialEmoji(emoji) : emoji,
+    };
+  }
+
+  /**
    * Adds options to this select menu
-   * @param {APISelectMenuOption[]} options The options to add to this select menu
+   * @param {RestOrArray<APISelectMenuOption>} options The options to add to this select menu
    * @returns {SelectMenuBuilder}
    */
-  addOptions(options) {
-    return super.addOptions(
-      options.map(({ emoji, ...option }) => ({
-        ...option,
-        emoji: emoji && typeof emoji === 'string' ? Util.parseEmoji(emoji) : emoji,
-      })),
-    );
+  addOptions(...options) {
+    return super.addOptions(normalizeArray(options).map(option => SelectMenuBuilder.normalizeEmoji(option)));
   }
 
   /**
    * Sets the options on this select menu
-   * @param {APISelectMenuOption[]} options The options to set on this select menu
+   * @param {RestOrArray<APISelectMenuOption>} options The options to set on this select menu
    * @returns {SelectMenuBuilder}
    */
-  setOptions(options) {
-    return super.setOptions(
-      options.map(({ emoji, ...option }) => ({
-        ...option,
-        emoji: emoji && typeof emoji === 'string' ? Util.parseEmoji(emoji) : emoji,
-      })),
-    );
+  setOptions(...options) {
+    return super.setOptions(normalizeArray(options).map(option => SelectMenuBuilder.normalizeEmoji(option)));
   }
 
   /**

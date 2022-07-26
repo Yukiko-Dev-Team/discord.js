@@ -10,7 +10,8 @@ import type { RequestHandler } from '../util/util';
 
 /**
  * Creates an HTTP handler used to forward requests to Discord
- * @param rest REST instance to use for the requests
+ *
+ * @param rest - REST instance to use for the requests
  */
 export function proxyRequests(rest: REST): RequestHandler {
 	return async (req, res) => {
@@ -33,6 +34,9 @@ export function proxyRequests(rest: REST): RequestHandler {
 				// This type cast is technically incorrect, but we want Discord to throw Method Not Allowed for us
 				method: method as RequestMethod,
 				passThroughBody: true,
+				headers: {
+					'Content-Type': req.headers['content-type']!,
+				},
 			});
 
 			await populateSuccessfulResponse(res, discordResponse);

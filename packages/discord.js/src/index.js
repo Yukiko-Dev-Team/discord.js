@@ -10,6 +10,13 @@ exports.ShardClientUtil = require('./sharding/ShardClientUtil');
 exports.ShardingManager = require('./sharding/ShardingManager');
 exports.WebhookClient = require('./client/WebhookClient');
 
+// Errors
+const { Error, TypeError, RangeError } = require('./errors/DJSError');
+exports.DiscordjsError = Error;
+exports.DiscordjsTypeError = TypeError;
+exports.DiscordjsRangeError = RangeError;
+exports.DiscordjsErrorCodes = require('./errors/ErrorCodes');
+
 // Utilities
 exports.ActivityFlagsBitField = require('./util/ActivityFlagsBitField');
 exports.ApplicationFlagsBitField = require('./util/ApplicationFlagsBitField');
@@ -34,7 +41,8 @@ exports.Sweepers = require('./util/Sweepers');
 exports.SystemChannelFlagsBitField = require('./util/SystemChannelFlagsBitField');
 exports.ThreadMemberFlagsBitField = require('./util/ThreadMemberFlagsBitField');
 exports.UserFlagsBitField = require('./util/UserFlagsBitField');
-exports.Util = require('./util/Util');
+__exportStar(require('./util/Util.js'), exports);
+exports.WebSocketShardEvents = require('./util/WebSocketShardEvents');
 exports.version = require('../package.json').version;
 
 // Managers
@@ -87,7 +95,7 @@ exports.ButtonBuilder = require('./structures/ButtonBuilder');
 exports.ButtonComponent = require('./structures/ButtonComponent');
 exports.ButtonInteraction = require('./structures/ButtonInteraction');
 exports.CategoryChannel = require('./structures/CategoryChannel');
-exports.Channel = require('./structures/Channel').Channel;
+exports.BaseChannel = require('./structures/BaseChannel').BaseChannel;
 exports.ChatInputCommandInteraction = require('./structures/ChatInputCommandInteraction');
 exports.ClientApplication = require('./structures/ClientApplication');
 exports.ClientPresence = require('./structures/ClientPresence');
@@ -114,7 +122,7 @@ exports.GuildScheduledEvent = require('./structures/GuildScheduledEvent').GuildS
 exports.GuildTemplate = require('./structures/GuildTemplate');
 exports.Integration = require('./structures/Integration');
 exports.IntegrationApplication = require('./structures/IntegrationApplication');
-exports.Interaction = require('./structures/Interaction');
+exports.BaseInteraction = require('./structures/BaseInteraction');
 exports.InteractionCollector = require('./structures/InteractionCollector');
 exports.InteractionResponse = require('./structures/InteractionResponse');
 exports.InteractionWebhook = require('./structures/InteractionWebhook');

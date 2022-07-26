@@ -1,6 +1,6 @@
 'use strict';
 
-const Util = require('../util/Util');
+const { basename, flatten } = require('../util/Util');
 
 /**
  * @typedef {Object} AttachmentPayload
@@ -13,18 +13,14 @@ const Util = require('../util/Util');
  * Represents an attachment
  */
 class Attachment {
-  /**
-   * @param {APIAttachment} data Attachment data
-   * @private
-   */
-  constructor({ url, filename, ...data }) {
-    this.attachment = url;
+  constructor(data) {
+    this.attachment = data.url;
     /**
      * The name of this attachment
      * @type {string}
      */
-    this.name = filename;
-    if (data) this._patch(data);
+    this.name = data.filename;
+    this._patch(data);
   }
 
   _patch(data) {
@@ -111,11 +107,11 @@ class Attachment {
    * @readonly
    */
   get spoiler() {
-    return Util.basename(this.url ?? this.name).startsWith('SPOILER_');
+    return basename(this.url ?? this.name).startsWith('SPOILER_');
   }
 
   toJSON() {
-    return Util.flatten(this);
+    return flatten(this);
   }
 }
 

@@ -16,7 +16,9 @@ body:
         - collection
         - rest
         - proxy
+        - proxy-container
         - voice
+        - ws
     validations:
       required: true
   - type: textarea
@@ -127,6 +129,7 @@ body:
         - DirectMessages
         - DirectMessageReactions
         - DirectMessageTyping
+        - MessageContent
         - GuildScheduledEvents
       multiple: true
     validations:

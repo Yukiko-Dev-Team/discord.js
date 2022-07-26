@@ -4,7 +4,7 @@ const { PermissionFlagsBits } = require('discord-api-types/v10');
 const Base = require('./Base');
 const VoiceState = require('./VoiceState');
 const TextBasedChannel = require('./interfaces/TextBasedChannel');
-const { Error } = require('../errors');
+const { Error, ErrorCodes } = require('../errors');
 const GuildMemberRoleManager = require('../managers/GuildMemberRoleManager');
 const PermissionsBitField = require('../util/PermissionsBitField');
 
@@ -211,6 +211,15 @@ class GuildMember extends Base {
   }
 
   /**
+   * The DM between the client's user and this member
+   * @type {?DMChannel}
+   * @readonly
+   */
+  get dmChannel() {
+    return this.client.users.dmChannel(this.id);
+  }
+
+  /**
    * The nickname of this member, or their username if they don't have one
    * @type {?string}
    * @readonly
@@ -239,7 +248,7 @@ class GuildMember extends Base {
     if (this.user.id === this.guild.ownerId) return false;
     if (this.user.id === this.client.user.id) return false;
     if (this.client.user.id === this.guild.ownerId) return true;
-    if (!this.guild.members.me) throw new Error('GUILD_UNCACHED_ME');
+    if (!this.guild.members.me) throw new Error(ErrorCodes.GuildUncachedMe);
     return this.guild.members.me.roles.highest.comparePositionTo(this.roles.highest) > 0;
   }
 
@@ -249,7 +258,7 @@ class GuildMember extends Base {
    * @readonly
    */
   get kickable() {
-    if (!this.guild.members.me) throw new Error('GUILD_UNCACHED_ME');
+    if (!this.guild.members.me) throw new Error(ErrorCodes.GuildUncachedMe);
     return this.manageable && this.guild.members.me.permissions.has(PermissionFlagsBits.KickMembers);
   }
 
@@ -259,7 +268,7 @@ class GuildMember extends Base {
    * @readonly
    */
   get bannable() {
-    if (!this.guild.members.me) throw new Error('GUILD_UNCACHED_ME');
+    if (!this.guild.members.me) throw new Error(ErrorCodes.GuildUncachedMe);
     return this.manageable && this.guild.members.me.permissions.has(PermissionFlagsBits.BanMembers);
   }
 
@@ -292,18 +301,17 @@ class GuildMember extends Base {
    */
   permissionsIn(channel) {
     channel = this.guild.channels.resolve(channel);
-    if (!channel) throw new Error('GUILD_CHANNEL_RESOLVE');
+    if (!channel) throw new Error(ErrorCodes.GuildChannelResolve);
     return channel.permissionsFor(this);
   }
 
   /**
    * Edits this member.
    * @param {GuildMemberEditData} data The data to edit the member with
-   * @param {string} [reason] Reason for editing this user
    * @returns {Promise<GuildMember>}
    */
-  edit(data, reason) {
-    return this.guild.members.edit(this, data, reason);
+  edit(data) {
+    return this.guild.members.edit(this, data);
   }
 
   /**
@@ -313,7 +321,7 @@ class GuildMember extends Base {
    * @returns {Promise<GuildMember>}
    */
   setNickname(nick, reason) {
-    return this.edit({ nick }, reason);
+    return this.edit({ nick, reason });
   }
 
   /**
@@ -369,7 +377,7 @@ class GuildMember extends Base {
    *   .catch(console.error);
    */
   disableCommunicationUntil(communicationDisabledUntil, reason) {
-    return this.edit({ communicationDisabledUntil }, reason);
+    return this.edit({ communicationDisabledUntil, reason });
   }
 
   /**

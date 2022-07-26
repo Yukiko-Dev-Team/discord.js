@@ -6,8 +6,8 @@ const { GatewayDispatchEvents, GatewayIntentBits, GatewayOpcodes } = require('di
 const WebSocket = require('../../WebSocket');
 const Events = require('../../util/Events');
 const IntentsBitField = require('../../util/IntentsBitField');
-const ShardEvents = require('../../util/ShardEvents');
 const Status = require('../../util/Status');
+const WebSocketShardEvents = require('../../util/WebSocketShardEvents');
 
 const STATUS_KEYS = Object.keys(Status);
 const CONNECTION_STATE = Object.keys(WebSocket.WebSocket);
@@ -20,6 +20,7 @@ try {
 
 /**
  * Represents a Shard's WebSocket connection
+ * @extends {EventEmitter}
  */
 class WebSocketShard extends EventEmitter {
   constructor(manager, id) {
@@ -85,6 +86,13 @@ class WebSocketShard extends EventEmitter {
     this.lastHeartbeatAcked = true;
 
     /**
+     * Used to prevent calling {@link WebSocketShard#event:close} twice while closing or terminating the WebSocket.
+     * @type {boolean}
+     * @private
+     */
+    this.closeEmitted = false;
+
+    /**
      * Contains the rate limit queue and metadata
      * @name WebSocketShard#ratelimit
      * @type {Object}
@@ -128,6 +136,14 @@ class WebSocketShard extends EventEmitter {
      * @private
      */
     Object.defineProperty(this, 'helloTimeout', { value: null, writable: true });
+
+    /**
+     * The WebSocket timeout.
+     * @name WebSocketShard#wsCloseTimeout
+     * @type {?NodeJS.Timeout}
+     * @private
+     */
+    Object.defineProperty(this, 'wsCloseTimeout', { value: null, writable: true });
 
     /**
      * If the manager attached its event handlers on the shard
@@ -186,11 +202,11 @@ class WebSocketShard extends EventEmitter {
 
     return new Promise((resolve, reject) => {
       const cleanup = () => {
-        this.removeListener(ShardEvents.Close, onClose);
-        this.removeListener(ShardEvents.Ready, onReady);
-        this.removeListener(ShardEvents.Resumed, onResumed);
-        this.removeListener(ShardEvents.InvalidSession, onInvalidOrDestroyed);
-        this.removeListener(ShardEvents.Destroyed, onInvalidOrDestroyed);
+        this.removeListener(WebSocketShardEvents.Close, onClose);
+        this.removeListener(WebSocketShardEvents.Ready, onReady);
+        this.removeListener(WebSocketShardEvents.Resumed, onResumed);
+        this.removeListener(WebSocketShardEvents.InvalidSession, onInvalidOrDestroyed);
+        this.removeListener(WebSocketShardEvents.Destroyed, onInvalidOrDestroyed);
       };
 
       const onReady = () => {
@@ -214,11 +230,11 @@ class WebSocketShard extends EventEmitter {
         reject();
       };
 
-      this.once(ShardEvents.Ready, onReady);
-      this.once(ShardEvents.Resumed, onResumed);
-      this.once(ShardEvents.Close, onClose);
-      this.once(ShardEvents.InvalidSession, onInvalidOrDestroyed);
-      this.once(ShardEvents.Destroyed, onInvalidOrDestroyed);
+      this.once(WebSocketShardEvents.Ready, onReady);
+      this.once(WebSocketShardEvents.Resumed, onResumed);
+      this.once(WebSocketShardEvents.Close, onClose);
+      this.once(WebSocketShardEvents.InvalidSession, onInvalidOrDestroyed);
+      this.once(WebSocketShardEvents.Destroyed, onInvalidOrDestroyed);
 
       if (this.connection?.readyState === WebSocket.OPEN) {
         this.debug('An open connection was found, attempting an immediate identify.');
@@ -256,7 +272,8 @@ class WebSocketShard extends EventEmitter {
 
       this.connectedAt = Date.now();
 
-      const ws = (this.connection = WebSocket.create(gateway, wsQuery));
+      // Adding a handshake timeout to just make sure no zombie connection appears.
+      const ws = (this.connection = WebSocket.create(gateway, wsQuery, { handshakeTimeout: 30_000 }));
       ws.onopen = this.onOpen.bind(this);
       ws.onmessage = this.onMessage.bind(this);
       ws.onerror = this.onError.bind(this);
@@ -343,30 +360,43 @@ class WebSocketShard extends EventEmitter {
    * @private
    */
   onClose(event) {
+    this.closeEmitted = true;
     if (this.sequence !== -1) this.closeSequence = this.sequence;
     this.sequence = -1;
+    this.setHeartbeatTimer(-1);
+    this.setHelloTimeout(-1);
+    // Clearing the WebSocket close timeout as close was emitted.
+    this.setWsCloseTimeout(-1);
+    // If we still have a connection object, clean up its listeners
+    if (this.connection) this._cleanupConnection();
+    this.status = Status.Disconnected;
+    this.emitClose(event);
+  }
 
+  /**
+   * This method is responsible to emit close event for this shard.
+   * This method helps the shard reconnect.
+   * @param {CloseEvent} [event] Close event that was received
+   */
+  emitClose(
+    event = {
+      code: 1011,
+      reason: 'INTERNAL_ERROR',
+      wasClean: false,
+    },
+  ) {
     this.debug(`[CLOSE]
     Event Code: ${event.code}
     Clean     : ${event.wasClean}
     Reason    : ${event.reason ?? 'No reason received'}`);
-
-    this.setHeartbeatTimer(-1);
-    this.setHelloTimeout(-1);
-    // If we still have a connection object, clean up its listeners
-    if (this.connection) this._cleanupConnection();
-
-    this.status = Status.Disconnected;
-
     /**
      * Emitted when a shard's WebSocket closes.
      * @private
      * @event WebSocketShard#close
      * @param {CloseEvent} event The received event
      */
-    this.emit(ShardEvents.Close, event);
+    this.emit(WebSocketShardEvents.Close, event);
   }
-
   /**
    * Called whenever a packet is received.
    * @param {Object} packet The received packet
@@ -384,7 +414,7 @@ class WebSocketShard extends EventEmitter {
          * Emitted when the shard receives the READY payload and is now waiting for guilds
          * @event WebSocketShard#ready
          */
-        this.emit(ShardEvents.Ready);
+        this.emit(WebSocketShardEvents.Ready);
 
         this.sessionId = packet.d.session_id;
         this.expectedGuilds = new Set(packet.d.guilds.map(d => d.id));
@@ -398,7 +428,7 @@ class WebSocketShard extends EventEmitter {
          * Emitted when the shard resumes successfully
          * @event WebSocketShard#resumed
          */
-        this.emit(ShardEvents.Resumed);
+        this.emit(WebSocketShardEvents.Resumed);
 
         this.status = Status.Ready;
         const replayed = packet.s - this.closeSequence;
@@ -435,7 +465,11 @@ class WebSocketShard extends EventEmitter {
         // Set the status to reconnecting
         this.status = Status.Reconnecting;
         // Finally, emit the INVALID_SESSION event
-        this.emit(ShardEvents.InvalidSession);
+        /**
+         * Emitted when the session has been invalidated.
+         * @event WebSocketShard#invalidSession
+         */
+        this.emit(WebSocketShardEvents.InvalidSession);
         break;
       case GatewayOpcodes.HeartbeatAck:
         this.ackHeartbeat();
@@ -475,7 +509,7 @@ class WebSocketShard extends EventEmitter {
        * @event WebSocketShard#allReady
        * @param {?Set<string>} unavailableGuilds Set of unavailable guilds, if any
        */
-      this.emit(ShardEvents.AllReady);
+      this.emit(WebSocketShardEvents.AllReady);
       return;
     }
     const hasGuildsIntent = new IntentsBitField(this.manager.client.options.intents).has(GatewayIntentBits.Guilds);
@@ -499,7 +533,7 @@ class WebSocketShard extends EventEmitter {
 
         this.status = Status.Ready;
 
-        this.emit(ShardEvents.AllReady, this.expectedGuilds);
+        this.emit(WebSocketShardEvents.AllReady, this.expectedGuilds);
       },
       hasGuildsIntent ? waitGuildTimeout : 0,
     ).unref();
@@ -524,6 +558,47 @@ class WebSocketShard extends EventEmitter {
       this.debug('Did not receive HELLO in time. Destroying and connecting again.');
       this.destroy({ reset: true, closeCode: 4009 });
     }, 20_000).unref();
+  }
+
+  /**
+   * Sets the WebSocket Close timeout.
+   * This method is responsible for detecting any zombie connections if the WebSocket fails to close properly.
+   * @param {number} [time] If set to -1, it will clear the timeout
+   * @private
+   */
+  setWsCloseTimeout(time) {
+    if (this.wsCloseTimeout) {
+      this.debug('[WebSocket] Clearing the close timeout.');
+      clearTimeout(this.wsCloseTimeout);
+    }
+    if (time === -1) {
+      this.wsCloseTimeout = null;
+      return;
+    }
+    this.wsCloseTimeout = setTimeout(() => {
+      this.setWsCloseTimeout(-1);
+      this.debug(`[WebSocket] Close Emitted: ${this.closeEmitted}`);
+      // Check if close event was emitted.
+      if (this.closeEmitted) {
+        this.debug(
+          `[WebSocket] was closed. | WS State: ${
+            CONNECTION_STATE[this.connection?.readyState ?? WebSocket.CLOSED]
+          } | Close Emitted: ${this.closeEmitted}`,
+        );
+        // Setting the variable false to check for zombie connections.
+        this.closeEmitted = false;
+        return;
+      }
+
+      this.debug(
+        // eslint-disable-next-line max-len
+        `[WebSocket] did not close properly, assuming a zombie connection.\nEmitting close and reconnecting again.`,
+      );
+
+      this.emitClose();
+      // Setting the variable false to check for zombie connections.
+      this.closeEmitted = false;
+    }, time).unref();
   }
 
   /**
@@ -567,7 +642,7 @@ class WebSocketShard extends EventEmitter {
     Connection State: ${this.connection ? CONNECTION_STATE[this.connection.readyState] : 'No Connection??'}`,
       );
 
-      this.destroy({ closeCode: 4009, reset: true });
+      this.destroy({ reset: true, closeCode: 4009 });
       return;
     }
 
@@ -716,11 +791,17 @@ class WebSocketShard extends EventEmitter {
     this.setHeartbeatTimer(-1);
     this.setHelloTimeout(-1);
 
+    this.debug(
+      `[WebSocket] Destroy: Attempting to close the WebSocket. | WS State: ${
+        CONNECTION_STATE[this.connection?.readyState ?? WebSocket.CLOSED]
+      }`,
+    );
     // Step 1: Close the WebSocket connection, if any, otherwise, emit DESTROYED
     if (this.connection) {
       // If the connection is currently opened, we will (hopefully) receive close
       if (this.connection.readyState === WebSocket.OPEN) {
         this.connection.close(closeCode);
+        this.debug(`[WebSocket] Close: Tried closing. | WS State: ${CONNECTION_STATE[this.connection.readyState]}`);
       } else {
         // Connection is not OPEN
         this.debug(`WS State: ${CONNECTION_STATE[this.connection.readyState]}`);
@@ -729,8 +810,13 @@ class WebSocketShard extends EventEmitter {
         // Attempt to close the connection just in case
         try {
           this.connection.close(closeCode);
-        } catch {
-          // No-op
+        } catch (err) {
+          this.debug(
+            `[WebSocket] Close: Something went wrong while closing the WebSocket: ${
+              err.message || err
+            }. Forcefully terminating the connection | WS State: ${CONNECTION_STATE[this.connection.readyState]}`,
+          );
+          this.connection.terminate();
         }
         // Emit the destroyed event if needed
         if (emit) this._emitDestroyed();
@@ -740,10 +826,19 @@ class WebSocketShard extends EventEmitter {
       this._emitDestroyed();
     }
 
+    if (this.connection?.readyState === WebSocket.CLOSING || this.connection?.readyState === WebSocket.CLOSED) {
+      this.closeEmitted = false;
+      this.debug(
+        `[WebSocket] Adding a WebSocket close timeout to ensure a correct WS reconnect.
+        Timeout: ${this.manager.client.options.closeTimeout}ms`,
+      );
+      this.setWsCloseTimeout(this.manager.client.options.closeTimeout);
+    }
+
     // Step 2: Null the connection object
     this.connection = null;
 
-    // Step 3: Set the shard status to Disconnected
+    // Step 3: Set the shard status to disconnected
     this.status = Status.Disconnected;
 
     // Step 4: Cache the old sequence (use to attempt a resume)
@@ -769,7 +864,8 @@ class WebSocketShard extends EventEmitter {
    * @private
    */
   _cleanupConnection() {
-    this.connection.onopen = this.connection.onclose = this.connection.onerror = this.connection.onmessage = null;
+    this.connection.onopen = this.connection.onclose = this.connection.onmessage = null;
+    this.connection.onerror = () => null;
   }
 
   /**
@@ -782,7 +878,7 @@ class WebSocketShard extends EventEmitter {
      * @private
      * @event WebSocketShard#destroyed
      */
-    this.emit(ShardEvents.Destroyed);
+    this.emit(WebSocketShardEvents.Destroyed);
   }
 }
 
