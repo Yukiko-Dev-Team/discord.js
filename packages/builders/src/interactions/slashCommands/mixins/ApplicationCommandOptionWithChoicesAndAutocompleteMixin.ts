@@ -1,9 +1,9 @@
 import { s } from '@sapphire/shapeshift';
-import { APIApplicationCommandOptionChoice, ApplicationCommandOptionType } from 'discord-api-types/v10';
-import { localizationMapPredicate, validateChoicesLength } from '../Assertions';
+import { ApplicationCommandOptionType, type APIApplicationCommandOptionChoice } from 'discord-api-types/v10';
+import { localizationMapPredicate, validateChoicesLength } from '../Assertions.js';
 
 const stringPredicate = s.string.lengthGreaterThanOrEqual(1).lengthLessThanOrEqual(100);
-const numberPredicate = s.number.greaterThan(-Infinity).lessThan(Infinity);
+const numberPredicate = s.number.greaterThan(Number.NEGATIVE_INFINITY).lessThan(Number.POSITIVE_INFINITY);
 const choicesPredicate = s.object({
 	name: stringPredicate,
 	name_localizations: localizationMapPredicate,
@@ -11,19 +11,33 @@ const choicesPredicate = s.object({
 }).array;
 const booleanPredicate = s.boolean;
 
-export class ApplicationCommandOptionWithChoicesAndAutocompleteMixin<T extends string | number> {
-	public readonly choices?: APIApplicationCommandOptionChoice<T>[];
+/**
+ * This mixin holds choices and autocomplete symbols used for options.
+ */
+export class ApplicationCommandOptionWithChoicesAndAutocompleteMixin<ChoiceType extends number | string> {
+	/**
+	 * The choices of this option.
+	 */
+	public readonly choices?: APIApplicationCommandOptionChoice<ChoiceType>[];
+
+	/**
+	 * Whether this option utilizes autocomplete.
+	 */
 	public readonly autocomplete?: boolean;
 
-	// Since this is present and this is a mixin, this is needed
+	/**
+	 * The type of this option.
+	 *
+	 * @privateRemarks Since this is present and this is a mixin, this is needed.
+	 */
 	public readonly type!: ApplicationCommandOptionType;
 
 	/**
-	 * Adds multiple choices for this option
+	 * Adds multiple choices to this option.
 	 *
 	 * @param choices - The choices to add
 	 */
-	public addChoices(...choices: APIApplicationCommandOptionChoice<T>[]): this {
+	public addChoices(...choices: APIApplicationCommandOptionChoice<ChoiceType>[]): this {
 		if (choices.length > 0 && this.autocomplete) {
 			throw new RangeError('Autocomplete and choices are mutually exclusive to each other.');
 		}
@@ -50,7 +64,12 @@ export class ApplicationCommandOptionWithChoicesAndAutocompleteMixin<T extends s
 		return this;
 	}
 
-	public setChoices<Input extends APIApplicationCommandOptionChoice<T>[]>(...choices: Input): this {
+	/**
+	 * Sets multiple choices for this option.
+	 *
+	 * @param choices - The choices to set
+	 */
+	public setChoices<Input extends APIApplicationCommandOptionChoice<ChoiceType>[]>(...choices: Input): this {
 		if (choices.length > 0 && this.autocomplete) {
 			throw new RangeError('Autocomplete and choices are mutually exclusive to each other.');
 		}
@@ -64,8 +83,9 @@ export class ApplicationCommandOptionWithChoicesAndAutocompleteMixin<T extends s
 	}
 
 	/**
-	 * Marks the option as autocompletable
-	 * @param autocomplete - If this option should be autocompletable
+	 * Whether this option uses autocomplete.
+	 *
+	 * @param autocomplete - Whether this option should use autocomplete
 	 */
 	public setAutocomplete(autocomplete: boolean): this {
 		// Assert that you actually passed a boolean

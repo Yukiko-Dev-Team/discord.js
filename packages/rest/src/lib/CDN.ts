@@ -1,12 +1,16 @@
+/* eslint-disable jsdoc/check-param-names */
 import {
 	ALLOWED_EXTENSIONS,
 	ALLOWED_SIZES,
 	ALLOWED_STICKER_EXTENSIONS,
 	DefaultRestOptions,
-	ImageExtension,
-	ImageSize,
-	StickerExtension,
-} from './utils/constants';
+	type ImageExtension,
+	type ImageSize,
+	type StickerExtension,
+} from './utils/constants.js';
+import { deprecationWarning } from './utils/utils.js';
+
+let deprecationEmittedForEmoji = false;
 
 /**
  * The options used for image URLs
@@ -15,7 +19,7 @@ export interface BaseImageURLOptions {
 	/**
 	 * The extension to use for the image URL
 	 *
-	 * @default 'webp'
+	 * @defaultValue `'webp'`
 	 */
 	extension?: ImageExtension;
 	/**
@@ -39,19 +43,19 @@ export interface ImageURLOptions extends BaseImageURLOptions {
  */
 export interface MakeURLOptions {
 	/**
+	 * The allowed extensions that can be used
+	 */
+	allowedExtensions?: readonly string[];
+	/**
 	 * The extension to use for the image URL
 	 *
-	 * @default 'webp'
+	 * @defaultValue `'webp'`
 	 */
 	extension?: string | undefined;
 	/**
 	 * The size specified in the image URL
 	 */
 	size?: ImageSize;
-	/**
-	 * The allowed extensions that can be used
-	 */
-	allowedExtensions?: ReadonlyArray<string>;
 }
 
 /**
@@ -94,6 +98,21 @@ export class CDN {
 	}
 
 	/**
+	 * Generates a user avatar decoration URL.
+	 *
+	 * @param userId - The id of the user
+	 * @param userAvatarDecoration - The hash provided by Discord for this avatar decoration
+	 * @param options - Optional options for the avatar decoration
+	 */
+	public avatarDecoration(
+		userId: string,
+		userAvatarDecoration: string,
+		options?: Readonly<BaseImageURLOptions>,
+	): string {
+		return this.makeURL(`/avatar-decorations/${userId}/${userAvatarDecoration}`, options);
+	}
+
+	/**
 	 * Generates a banner URL, e.g. for a user or a guild.
 	 *
 	 * @param id - The id that has the banner splash
@@ -116,12 +135,15 @@ export class CDN {
 	}
 
 	/**
-	 * Generates the default avatar URL for a discriminator.
+	 * Generates a default avatar URL
 	 *
-	 * @param discriminator - The discriminator modulo 5
+	 * @param index - The default avatar index
+	 * @remarks
+	 * To calculate the index for a user do `(userId >> 22) % 6`,
+	 * or `discriminator % 5` if they're using the legacy username system.
 	 */
-	public defaultAvatar(discriminator: number): string {
-		return this.makeURL(`/embed/avatars/${discriminator}`, { extension: 'png' });
+	public defaultAvatar(index: number): string {
+		return this.makeURL(`/embed/avatars/${index}`, { extension: 'png' });
 	}
 
 	/**
@@ -139,10 +161,38 @@ export class CDN {
 	 * Generates an emoji's URL for an emoji.
 	 *
 	 * @param emojiId - The emoji id
-	 * @param extension - The extension of the emoji
+	 * @param options - Optional options for the emoji
 	 */
-	public emoji(emojiId: string, extension?: ImageExtension): string {
-		return this.makeURL(`/emojis/${emojiId}`, { extension });
+	public emoji(emojiId: string, options?: Readonly<BaseImageURLOptions>): string;
+
+	/**
+	 * Generates an emoji's URL for an emoji.
+	 *
+	 * @param emojiId - The emoji id
+	 * @param extension - The extension of the emoji
+	 * @deprecated This overload is deprecated. Pass an object containing the extension instead.
+	 */
+	// eslint-disable-next-line @typescript-eslint/unified-signatures
+	public emoji(emojiId: string, extension?: ImageExtension): string;
+
+	public emoji(emojiId: string, options?: ImageExtension | Readonly<BaseImageURLOptions>): string {
+		let resolvedOptions;
+
+		if (typeof options === 'string') {
+			if (!deprecationEmittedForEmoji) {
+				deprecationWarning(
+					'Passing a string for the second parameter of CDN#emoji() is deprecated. Use an object instead.',
+				);
+
+				deprecationEmittedForEmoji = true;
+			}
+
+			resolvedOptions = { extension: options };
+		} else {
+			resolvedOptions = options;
+		}
+
+		return this.makeURL(`/emojis/${emojiId}`, resolvedOptions);
 	}
 
 	/**
@@ -192,6 +242,7 @@ export class CDN {
 
 	/**
 	 * Generates a URL for the icon of a role
+	 *
 	 * @param roleId - The id of the role that has the icon
 	 * @param roleIconHash - The hash provided by Discord for this role icon
 	 * @param options - Optional options for the role icon
@@ -216,12 +267,11 @@ export class CDN {
 	 *
 	 * @param stickerId - The sticker id
 	 * @param extension - The extension of the sticker
+	 * @privateRemarks
+	 * Stickers cannot have a `.webp` extension, so we default to a `.png`
 	 */
-	public sticker(stickerId: string, extension?: StickerExtension): string {
-		return this.makeURL(`/stickers/${stickerId}`, {
-			allowedExtensions: ALLOWED_STICKER_EXTENSIONS,
-			extension: extension ?? 'png', // Stickers cannot have a `.webp` extension, so we default to a `.png`
-		});
+	public sticker(stickerId: string, extension: StickerExtension = 'png'): string {
+		return this.makeURL(`/stickers/${stickerId}`, { allowedExtensions: ALLOWED_STICKER_EXTENSIONS, extension });
 	}
 
 	/**
@@ -285,6 +335,7 @@ export class CDN {
 		route: string,
 		{ allowedExtensions = ALLOWED_EXTENSIONS, extension = 'webp', size }: Readonly<MakeURLOptions> = {},
 	): string {
+		// eslint-disable-next-line no-param-reassign
 		extension = String(extension).toLowerCase();
 
 		if (!allowedExtensions.includes(extension)) {

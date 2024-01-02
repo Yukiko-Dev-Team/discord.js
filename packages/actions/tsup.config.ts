@@ -1,9 +1,13 @@
-import { createTsupConfig } from '../../tsup.config';
+import { createTsupConfig } from '../../tsup.config.js';
 
 export default createTsupConfig({
-	entry: ['src/index.ts', 'src/formatTag/index.ts'],
-	format: ['cjs'],
-	skipNodeModulesBundle: false,
-	noExternal: ['@actions/core'],
-	minify: true,
+	entry: [
+		'src/index.ts',
+		'src/formatTag/index.ts',
+		'src/uploadDocumentation/index.ts',
+		'src/uploadSearchIndices/index.ts',
+	],
+	dts: false,
+	format: 'esm',
+	minify: 'terser',
 });

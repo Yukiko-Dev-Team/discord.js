@@ -1,4 +1,7 @@
-import { createTsupConfig } from '../../tsup.config';
+import { createTsupConfig } from '../../tsup.config.js';
 
-// TODO: Set options to bundle node_modules - making the Docker image smaller
-export default createTsupConfig({ minify: true, dts: false });
+export default createTsupConfig({
+	dts: false,
+	format: 'esm',
+	minify: 'terser',
+});

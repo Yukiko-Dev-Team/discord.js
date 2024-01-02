@@ -1,54 +1,50 @@
-import { relative, resolve } from 'node:path';
-import { defineConfig, type Options } from 'tsup';
+import type { Options } from 'tsup';
+import { defineConfig } from 'tsup';
 
-type ConfigOptions = Pick<
-	Options,
-	| 'globalName'
-	| 'minify'
-	| 'entry'
-	| 'format'
-	| 'target'
-	| 'sourcemap'
-	| 'skipNodeModulesBundle'
-	| 'noExternal'
-	| 'esbuildOptions'
-	| 'dts'
-	| 'bundle'
->;
-
-export const createTsupConfig = ({
-	globalName,
-	format = ['esm', 'cjs'],
-	dts = true,
-	target = 'es2021',
-	sourcemap = true,
-	minify = false,
+export function createTsupConfig({
 	entry = ['src/index.ts'],
+	external = [],
+	noExternal = [],
+	platform = 'node',
+	format = ['esm', 'cjs'],
+	target = 'es2022',
 	skipNodeModulesBundle = true,
-	noExternal,
-	esbuildOptions = (options, context) => {
-		if (context.format === 'cjs') {
-			options.banner = {
-				js: '"use strict";',
-			};
-		}
+	clean = true,
+	shims = format.includes('cjs'),
+	cjsInterop = format.includes('cjs'),
+	minify = false,
+	terserOptions = {
+		mangle: false,
+		keep_classnames: true,
+		keep_fnames: true,
 	},
-	bundle,
-}: ConfigOptions = {}) =>
-	defineConfig({
-		clean: true,
-		dts,
+	splitting = false,
+	keepNames = true,
+	dts = true,
+	sourcemap = true,
+	esbuildPlugins = [],
+	treeshake = false,
+	outDir = 'dist',
+}: Options = {}) {
+	return defineConfig({
 		entry,
-		format,
-		minify,
-		skipNodeModulesBundle,
-		sourcemap,
-		target,
-		tsconfig: relative(__dirname, resolve(process.cwd(), 'tsconfig.json')),
-		keepNames: true,
-		globalName,
+		external,
 		noExternal,
-		esbuildOptions,
-		bundle,
-		shims: true,
+		platform,
+		format,
+		skipNodeModulesBundle,
+		target,
+		clean,
+		shims,
+		cjsInterop,
+		minify,
+		terserOptions,
+		splitting,
+		keepNames,
+		dts,
+		sourcemap,
+		esbuildPlugins,
+		treeshake,
+		outDir,
 	});
+}
